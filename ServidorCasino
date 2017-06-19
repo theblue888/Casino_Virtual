@@ -4,8 +4,6 @@ import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.EOFException;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -18,13 +16,14 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
 public class ServidorCasino extends JFrame{
+	
+	private static final long serialVersionUID = 1L;
 	private JTextField mensajeCliente;
 	private JTextArea areaPantalla;
 	private ObjectInputStream entrada;
 	private ObjectOutputStream salida;
 	private Socket conexion;
 	private ServerSocket servidor;
-	private int contador = 1;
 	private EscuchaEventos escucha = new EscuchaEventos();
 	private Ruleta_Control control = new Ruleta_Control();
 	
@@ -50,28 +49,22 @@ public class ServidorCasino extends JFrame{
 			servidor=new ServerSocket(12345,7);
 			
 			while(true){
-				esperarConexion();
+				mostrarMensaje("Esperando al cliente", "Servidor");
+				conexion=servidor.accept();
+				mostrarMensaje("Conexion con cliente: " + conexion.getInetAddress().getHostName(), "Servidor");
 				obtenerFlujos();
 				procesarConexion();
 			}
 		}
 		catch(EOFException e){
-			mostrarMensaje("\n Servidor Termino la conexion");
+			mostrarMensaje("Servidor Termino la conexion", "Servidor");
 		}
 		catch(IOException ioe){
 			ioe.printStackTrace();
 		}
 		finally{
 			cerrarConexion();
-			contador++;
 		}
-	}
-	
-	//Espera la conexion
-	private void esperarConexion() throws IOException{
-		mostrarMensaje("\n Esperando al cliente \n");
-		conexion=servidor.accept();
-		mostrarMensaje("Conexion con cliente: " + conexion.getInetAddress().getHostName());
 	}
 	
 	//Obtiene los flujos de objetos
@@ -79,7 +72,7 @@ public class ServidorCasino extends JFrame{
 		salida = new ObjectOutputStream(conexion.getOutputStream());
 		salida.flush();
 		entrada = new ObjectInputStream(conexion.getInputStream());
-		mostrarMensaje("\n Se obtuvieron los flujos E/S \n");
+		mostrarMensaje("Flujos E/S listos" , "Servidor");
 	}
 	
 	//Procesa la conexion
@@ -91,11 +84,12 @@ public class ServidorCasino extends JFrame{
 		do{
 			try{
 				mensaje=(String)entrada.readObject();
-				mostrarMensaje(mensaje);
+				control.guardarMensaje(mensaje);
 				procesar(mensaje);
+				mostrarMensaje(mensaje, "Ciente");
 			}
 			catch(ClassNotFoundException e){
-				mostrarMensaje("\n Objeto desconocido");
+				mostrarMensaje("Objeto desconocido", "Servidor");
 			}
 		}
 		while(!mensaje.equals("CLIENTE>>>TERMINAR"));
@@ -103,14 +97,21 @@ public class ServidorCasino extends JFrame{
 	
 	//Procesa el mensaje  y busca si tiene una pista
 	private void procesar(String mensaje){
-		if(mensaje.equals("tiro")){
+		if(mensaje.equals("Apuesta")){
+			String [] estado = {
+					control.getMensaje().get(control.getMensaje().size()-4),
+					control.getMensaje().get(control.getMensaje().size()-3),
+			};
 			enviarDatos(String.valueOf(control.tirar()));
+			int premio = control.premio(estado, Integer.parseInt(control.getMensaje().get(control.getMensaje().size()-2)));
+			enviarDatos(String.valueOf(premio));
 		}
+
 	}
 	
 	//Cierra las conexiones
 	private void cerrarConexion(){
-		mostrarMensaje("\n Terminando Conexion");
+		mostrarMensaje("Terminando Conexion", "Servidor");
 		volverEditableJTextField(false);
 		try{
 			salida.close();
@@ -127,19 +128,19 @@ public class ServidorCasino extends JFrame{
 		try{
 			salida.writeObject(mensaje);
 			salida.flush();
-			mostrarMensaje(mensaje);
+			mostrarMensaje(mensaje, "Servidor");
 		}
 		catch(IOException e){
-			mostrarMensaje("\n Error al escribir Objeto");
+			mostrarMensaje("Error al escribir Objeto", "Servidor");
 		}
 	}
 	
 	//Muestra un mensaje en el servidor
-		private void mostrarMensaje(String mensaje){
+		private void mostrarMensaje(String mensaje,String emisor){
 			SwingUtilities.invokeLater(
 					new Runnable(){
 						public void run(){
-							areaPantalla.append("\n" + mensaje);
+							areaPantalla.append("\n" + emisor + ": " + mensaje);
 						}
 					}
 			);
@@ -160,7 +161,6 @@ public class ServidorCasino extends JFrame{
 
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			// TODO Auto-generated method stub
 			enviarDatos(e.getActionCommand());
 			mensajeCliente.setText("");
 		}
